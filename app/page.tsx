@@ -1,113 +1,171 @@
-import Image from "next/image";
+'use client';
+import React, { useState } from 'react';
+import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import InitialAssessment from '@/components/InitialAssessment';
+type ErrorState = null | string;
 
-export default function Home() {
-  return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 w-full max-w-5xl items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">app/page.tsx</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:size-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{" "}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
-        </div>
-      </div>
+type Message = {
+  role: 'user' | 'assistant'; // Assuming roles are either 'user' or 'assistant'
+  content: string;
+};
 
-      <div className="relative z-[-1] flex place-items-center before:absolute before:h-[300px] before:w-full before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-full after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 sm:before:w-[480px] sm:after:w-[240px] before:lg:h-[360px]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
+type DebugInfoType = {
+  status?: number; // Optional because it might not always be available
+  statusText?: string; // Optional for the same reason
+  headers: Record<string, string>; // Assuming headers are key-value pairs of strings
+  body: string; // The body content
+};
+
+const CBTApp = () => {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [userInput, setUserInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isInitialAssessmentComplete, setIsInitialAssessmentComplete] = useState(false);
+  const [error, setError] = useState<ErrorState>(null);
+  const [debugInfo, setDebugInfo] = useState<DebugInfoType | null>(null);
+
+
+  const handleSendMessage = async () => {
+    if (userInput.trim() === '' || isLoading) return;
+    const newMessages: Message[] = [...messages, { role: 'user', content: userInput }];
+    setMessages(newMessages);
+    setUserInput('');
+    setIsLoading(true);
+
+    try {
+      const response = await fetch('/api/cbt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ messages: newMessages }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Error en la respuesta del servidor');
+      }
+
+      const data = await response.json();
+      setMessages([...newMessages, { role: 'assistant', content: data.response }]);
+    } catch (error) {
+      setMessages([...newMessages, { role: 'assistant', content: 'Lo siento, hubo un error al procesar tu mensaje.' }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleInitialAssessmentComplete = async (answers: { problems: any; symptoms: any; thoughts: any; emotions: any; behaviors: any; triggers: any; background: any; }) => {
+    setIsInitialAssessmentComplete(true);
+    setIsLoading(true);
+    setError(null);
+    setDebugInfo(null);
+
+    const initialMessage = `
+      Problemas: ${answers.problems}
+      Síntomas: ${answers.symptoms}
+      Pensamientos: ${answers.thoughts}
+      Emociones: ${answers.emotions}
+      Comportamientos: ${answers.behaviors}
+      Desencadenantes: ${answers.triggers}
+      Antecedentes: ${answers.background}
+    `;
+
+    try {
+      const response = await fetch('/api/cbt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ messages: [{ role: 'user', content: initialMessage }] }),
+      });
+
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.indexOf("application/json") !== -1) {
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(`Error del servidor: ${data.message || response.statusText}`);
+        }
+        setMessages([
+          { role: 'user', content: 'He completado la evaluación inicial.' },
+          { role: 'assistant', content: data.response }
+        ]);
+      } else {
+        // La respuesta no es JSON, probablemente es HTML
+        const text = await response.text();
+        console.error('Respuesta no JSON recibida:', text);
+        setDebugInfo({
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries()),
+          body: text.substring(0, 500)
+        });
+        throw new Error('Recibida respuesta inesperada del servidor');
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error('Error detallado:', error);
+        setError(`Error: ${error.message}`);
+        setMessages([{ role: 'assistant', content: 'Lo siento, hubo un error al procesar la evaluación inicial. Por favor, inténtalo de nuevo más tarde.' }]);
+      } else {
+        console.error('Error desconocido:', error);
+        setError('Ocurrió un error desconocido.');
+        setMessages([{ role: 'assistant', content: 'Lo siento, hubo un error al procesar la evaluación inicial. Por favor, inténtalo de nuevo más tarde.' }]);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+
+  if (!isInitialAssessmentComplete) {
+    return <InitialAssessment onComplete={handleInitialAssessmentComplete} />;
+  }
+
+
+    return (
+      <Card className="w-full max-w-2xl mx-auto">
+        <CardHeader>
+          <h2 className="text-2xl font-bold">Terapia Cognitivo-Conductual Asistida por IA</h2>
+        </CardHeader>
+        <CardContent>
+          {error && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+              <strong className="font-bold">Error: </strong>
+              <span className="block sm:inline">{error}</span>
+            </div>
+          )}
+          {debugInfo && (
+            <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative mb-4">
+              <strong className="font-bold">Debug Info: </strong>
+              <pre className="text-xs mt-2 overflow-auto max-h-40">
+                {JSON.stringify(debugInfo, null, 2)}
+              </pre>
+            </div>
+          )}
+          <div className="space-y-4">
+            {messages.map((message, index) => (
+              <div key={index} className={`p-2 rounded-lg ${message.role === 'user' ? 'bg-blue-100 text-right' : 'bg-gray-100'}`}>
+                {message.content}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      <CardFooter className="flex flex-col space-y-2">
+        <Textarea
+          value={userInput}
+          onChange={(e) => setUserInput(e.target.value)}
+          placeholder="Escribe tu mensaje aquí..."
+          className="w-full"
+          disabled={isLoading}
         />
-      </div>
-
-      <div className="mb-32 grid text-center lg:mb-0 lg:w-full lg:max-w-5xl lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Docs{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Learn{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Templates{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Explore starter templates for Next.js.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Deploy{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-balance text-sm opacity-50">
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
+        <Button onClick={handleSendMessage} className="w-full" disabled={isLoading}>
+          {isLoading ? 'Enviando...' : 'Enviar'}
+        </Button>
+      </CardFooter>
+    </Card>
   );
-}
+};
+
+export default CBTApp;

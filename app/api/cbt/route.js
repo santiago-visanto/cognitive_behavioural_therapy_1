@@ -45,7 +45,7 @@ export async function POST(request) {
                 ...messages
             ],
             temperature: 0.7,  // Ajusta la creatividad de las respuestas
-            max_tokens: 1000,  // Limita la longitud de la respuesta
+            max_tokens: 2000,  // Limita la longitud de la respuesta
             top_p: 0.9,        // Controla la diversidad de las respuestas
         });
 

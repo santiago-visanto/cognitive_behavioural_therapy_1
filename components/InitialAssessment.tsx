@@ -1,10 +1,26 @@
 import React, { useState } from 'react';
-import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/card';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Progress } from '@/components/ui/progress';
 
-const InitialAssessment = ({ onComplete }: { onComplete: any }) => {
+type Question = {
+  key: keyof Answers;
+  question: string;
+};
+
+type Answers = {
+  problems: string;
+  symptoms: string;
+  thoughts: string;
+  emotions: string;
+  behaviors: string;
+  triggers: string;
+  background: string;
+};
+
+const InitialAssessment = ({ onComplete }: { onComplete: (answers: Answers) => void }) => {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Answers>({
     problems: '',
@@ -16,15 +32,6 @@ const InitialAssessment = ({ onComplete }: { onComplete: any }) => {
     background: ''
   });
 
-  type Question = {
-    key: keyof typeof answers;
-    question: string;
-  };
-
-  type Answers = {
-    [key: string]: string;
-  };
-
   const questions: Question[] = [
     { key: 'problems', question: '¿Cuáles son los problemas o dificultades específicas que estás enfrentando actualmente?' },
     { key: 'symptoms', question: '¿Qué síntomas físicos o emocionales has experimentado relacionados con estos problemas?' },
@@ -35,7 +42,7 @@ const InitialAssessment = ({ onComplete }: { onComplete: any }) => {
     { key: 'background', question: '¿Puedes proporcionar alguna información de fondo relevante sobre tu historia personal o relaciones?' }
   ];
 
-  const handleInputChange = (e: { target: { value: any; }; }) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setAnswers({ ...answers, [questions[step].key]: e.target.value });
   };
 
@@ -54,30 +61,43 @@ const InitialAssessment = ({ onComplete }: { onComplete: any }) => {
   };
 
   return (
-    <Card className="w-full max-w-2xl mx-auto">
-      <CardHeader>
-        <h2 className="text-2xl font-bold">Evaluación Inicial</h2>
-        <p className="text-sm text-gray-500">Paso {step + 1} de {questions.length}</p>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          <Label htmlFor="answer">{questions[step].question}</Label>
+    <div className="container mx-auto px-4 py-8">
+      <Card className="w-full max-w-2xl mx-auto shadow-lg">
+        <CardHeader className="space-y-4">
+          <CardTitle className="text-3xl font-bold text-primary">Terapia Cognitivo-Conductual Asistida por IA</CardTitle>
+          <CardDescription className="text-lg">Por favor responde las siguientes preguntas:<span style={{ display: 'block', marginBottom: '10px' }}>Pregunta {step + 1} de {questions.length}</span></CardDescription>
+          <Progress value={(step + 1) / questions.length * 100} className="w-full h-2" />
+        </CardHeader>
+        <CardContent className="space-y-6 px-6 py-8">
+          <Label htmlFor="answer" className="text-xl font-medium text-secondary-foreground">
+            {questions[step].question}
+          </Label>
           <Textarea
             id="answer"
-            value={answers[questions[step].key as keyof Answers]}
+            value={answers[questions[step].key]}
             onChange={handleInputChange}
             placeholder="Escribe tu respuesta aquí..."
-            className="w-full"
+            className="w-full min-h-[200px] text-lg p-4 resize-none border-2 focus:ring-2 focus:ring-primary"
           />
-        </div>
-      </CardContent>
-      <CardFooter className="flex justify-between">
-        <Button onClick={handlePrevious} disabled={step === 0}>Anterior</Button>
-        <Button onClick={handleNext}>
-          {step === questions.length - 1 ? 'Finalizar' : 'Siguiente'}
-        </Button>
-      </CardFooter>
-    </Card>
+        </CardContent>
+        <CardFooter className="flex justify-between px-6 py-6 bg-secondary/5">
+          <Button 
+            onClick={handlePrevious} 
+            variant="outline" 
+            disabled={step === 0}
+            className="px-6 py-2 text-lg"
+          >
+            Anterior
+          </Button>
+          <Button 
+            onClick={handleNext}
+            className="px-6 py-2 text-lg bg-primary hover:bg-primary/90"
+          >
+            {step === questions.length - 1 ? 'Finalizar' : 'Siguiente'}
+          </Button>
+        </CardFooter>
+      </Card>
+    </div>
   );
 };
 
